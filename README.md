@@ -1,3 +1,8 @@
-# Local Interconnect Network Device Driver for FRDM-K64F
-# by César Villarreal, Tsipini Franco, Moisés López
-# Networks for Embedded Systems
+# ***Local Interconnect Network Device Driver for FRDM-K64F***
+##### ***Networks for Embedded Systems***
+
+**Team:** 
+- **César Villarreal** : @4497cv
+- **Tsipini Franco**: @t51p
+- **Moisés López**: @DES7RIKER
+ 
