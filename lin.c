@@ -31,9 +31,27 @@
 
 void LIN_init(const lin_config_t* LIN_config)
 {
-	UART_init(LIN_config->uart_channel, (uint32_t) system_clk, LIN_config->baudrate);
+	UART_init(LIN_config->uart_channel, (uint32_t) LIN_config->system_clk, LIN_config->baudrate);
+
+	switch(LIN_config->operation_mode)
+	{
+		case MASTER:
+
+		break;
+		case SLAVE:
+		
+		break;
+		default:
+		break;
+	}
 }
 
+static void LIN_SYNC_BREAK()
+{
+	
+}
+
+//***********//
 int main(void)
 {
 	/* Initialize board hardware. */
@@ -47,8 +65,10 @@ int main(void)
 		UART_0,       //uart channel
 		SYSTEM_CLOCK, //system clock
 		BD_9600       //uart's transference baud-rate
+		MASTER
 	}
 
+	LIN_init(LIN_config);
     xTaskCreate(task_100ms, "100ms Task", configMINIMAL_STACK_SIZE + 10, NULL, hello_task_PRIORITY, NULL);
     vTaskStartScheduler();
 
@@ -59,4 +79,3 @@ int main(void)
 
 	return 0;
 }
-

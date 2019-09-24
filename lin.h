@@ -14,13 +14,23 @@
 
 typedef enum
 {
-	dominant,
-	recesive
-} signal_state;
+	DOMINANT = 0,
+	RECESIVE = 1
+} signal_state_t;
+
+typedef enum
+{
+	SLAVE,
+	MASTER
+} lin_operation_mode_t
 
 typedef struct
 {
-	uart_channel_t uart_channel;
+	uart_channel_t uart_channel; //uart's channel
+	uint32_t system_clk;
+	lin_baud_rate_t baud_rate;
+	lin_operation_mode_t operation_mode; //indicate if slave or master
+
 } lin_config_t;
 
 typedef enum 
