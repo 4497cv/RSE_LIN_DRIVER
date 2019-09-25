@@ -9,9 +9,6 @@
 */
 
 /* Freescale includes. */
-#include "fsl_device_registers.h"
-#include "fsl_debug_console.h"
-#include "fsl_flexcan.h"
 #include "board.h"
 
 #include "pin_mux.h"
@@ -19,6 +16,8 @@
 
 #include "lin.h"
 #include "uart.h"
+#include "bits.h"
+#include "gpio.h"
 
 #define SYSTEM_CLOCK (21000000U)
 uart_channel_t g_uart_channel;
@@ -28,11 +27,11 @@ static FSM_master_t FSM_master[HEADER_ST] =
 	{LIN_SYNC_BREAK,  {synch_field, ident_field, synch_break}},
 	{LIN_SYNC_FIELD,  {ident_field, synch_break, synch_field}},
 	{LIN_IDENT_FIELD, {synch_break, synch_field, ident_field}}
-}
+};
 
 void LIN_init(const lin_config_t* LIN_config)
 {
-	UART_init(LIN_config->uart_channel, (uint32_t) LIN_config->system_clk, LIN_config->baudrate);
+	UART_init(LIN_config->uart_channel, (uint32_t) LIN_config->system_clk, LIN_config->baud_rate);
 	g_uart_channel = LIN_config->uart_channel;
 	
 	switch(LIN_config->operation_mode)
@@ -53,13 +52,13 @@ void LIN_SEND_MESSAGE_HEADER()
 {
 	lin_header_st hd_state = synch_break;
 
-	while(synch_break != hd_state.next[0])
+	while(synch_break != FSM_master[hd_state].next[0])
 	{
 		FSM_master[hd_state].fptr();
 	}
 }
 
-static void LIN_SYNC_BREAK()
+void LIN_SYNC_BREAK()
 {
 	/*
 		A dominant signal is recognized as Synch Break field,
@@ -76,7 +75,7 @@ static void LIN_SYNC_BREAK()
 	UART_put_char(g_uart_channel, low_phase_second);
 }
 
-static void LIN_SYNC_FIELD()
+void LIN_SYNC_FIELD()
 {
 	/*
 		"The  SYNCH  FIELD  contains  the  information for  the  clock
@@ -100,20 +99,21 @@ static void LIN_SYNC_FIELD()
 	and ultimately determines which nodes in the network receive or respond 
 	to each transmission.
 */
-static void LIN_IDENT_FIELD(uint8_t message_id, uint8_t message_parity)
+void LIN_IDENT_FIELD(uint8_t message_id, uint8_t message_parity)
 {
 	uint8_t id_field;
 	boolean_t id_valid;
 	
+	id_field = 0;
 	id_valid = is_identifier_valid(message_id);
 	
 	if(TRUE == id_valid)
 	{
-		message_parity &= (MSG_PARITY_MASK)
-		message_id &= (MSG_ID_MASK)
+		message_parity &= (MSG_PARITY_MASK);
+		message_id &= (MSG_ID_MASK);
 		
-		id_field |= message_parity
-		id_field |= message_id
+		id_field |= message_parity;
+		id_field |= message_id;
 
 		/*
 			The IDENTIFIER FIELD (ID-Field) denotes the content of a message. 
@@ -146,7 +146,7 @@ boolean_t is_identifier_valid(uint8_t message_id)
 {
 	boolean_t ret_val;
 
-	if (message_id != RID0) && 
+	if((message_id != RID0) &&
 	   (message_id != RID1) &&
 	   (message_id != RID2) &&
 	   (message_id != RID3) &&
@@ -169,21 +169,22 @@ boolean_t is_identifier_valid(uint8_t message_id)
 //***********//
 int main(void)
 {
-	/* Initialize board hardware. */
-	BOARD_InitPins();
-	BOARD_BootClockRUN();
-	BOARD_InitDebugConsole();
-	CAN_Init();
+	/* System GPIO configuration */
+	gpio_pin_control_register_t uart_config = GPIO_MUX3;
 
-	const lin_config_t LIN_config = 
+	const lin_config_t LIN_config =
 	{
 		UART_0,       //uart channel
 		SYSTEM_CLOCK, //system clock
-		BD_9600       //uart's transference baud-rate
+		BD_9600,       //uart's transference baud-rate
 		MASTER
-	}
+	};
 
-	LIN_init(LIN_config);
+	/**Configures the pin control register of pin16 in PortB as UART RX*/
+	GPIO_pin_control_register(GPIO_B, BIT16, &uart_config);
+
+	LIN_init(&LIN_config);
+
     //xTaskCreate(task_100ms, "100ms Task", configMINIMAL_STACK_SIZE + 10, NULL, hello_task_PRIORITY, NULL);
     //vTaskStartScheduler();
 

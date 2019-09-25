@@ -27,7 +27,7 @@ void UART0_RX_TX_IRQHandler(void)
 }
 
 void UART_init(uart_channel_t uart_channel, uint32_t system_clk, baud_rate_t baud_rate)
-{bau
+{
 	uint16_t SBR_BRFD;
 	switch(uart_channel)
 	{

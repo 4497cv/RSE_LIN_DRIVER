@@ -27,7 +27,7 @@ typedef enum
 {
 	SLAVE,
 	MASTER
-} lin_operation_mode_t
+} lin_operation_mode_t;
 
 typedef enum
 {
@@ -52,6 +52,13 @@ typedef struct
 	lin_header_st next[3];
 } FSM_master_t;
 
+typedef enum
+{
+	LIN_BD_2400 = 2400,
+	LIN_BD_9600 = 9600,
+	LIN_BD_19200 = 19200
+} lin_baud_rate_t;
+
 typedef struct
 {
 	uart_channel_t uart_channel; //uart's channel
@@ -60,17 +67,11 @@ typedef struct
 	lin_operation_mode_t operation_mode; //indicate if slave or master
 } lin_config_t;
 
-typedef enum 
-{
-	BD_2400 = 2400,
-	BD_9600 = 9600,
-	BD_19200 = 19200
-} lin_baud_rate_t;
 
 boolean_t is_identifier_valid(uint8_t message_id);
-static void LIN_IDENT_FIELD(uint8_t message_id, uint8_t message_parity);
-static void LIN_SYNC_FIELD();
-static void LIN_SYNC_BREAK();
+void LIN_IDENT_FIELD(uint8_t message_id, uint8_t message_parity);
+void LIN_SYNC_FIELD();
+void LIN_SYNC_BREAK();
 void LIN_SEND_MESSAGE_HEADER(); 
 void LIN_init(const lin_config_t* LIN_config);
 

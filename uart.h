@@ -13,6 +13,7 @@
 #include <stdint.h>
 #include "MK64F12.h"
 #include "bits.h"
+#include "stdint.h"
 
 #define SDR 16 /** Serial Data Rate **/
 #define shift_8bit 8
