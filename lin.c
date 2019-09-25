@@ -31,9 +31,9 @@ uart_channel_t g_uart_channel;
 
 static FSM_master_t FSM_master[HEADER_ST] =
 {
-	{LIN_SYNC_BREAK,  {synch_break, synch_field, ident_field}},
-	{LIN_SYNC_FIELD,  {synch_field, ident_field, synch_break}},
-	{LIN_IDENT_FIELD, {ident_field, synch_break, synch_field}}
+	{LIN_SYNC_BREAK,  {synch_field, ident_field, synch_break}},
+	{LIN_SYNC_FIELD,  {ident_field, synch_break, synch_field}},
+	{LIN_IDENT_FIELD, {synch_break, synch_field, ident_field}}
 }
 
 void LIN_init(const lin_config_t* LIN_config)
@@ -51,6 +51,17 @@ void LIN_init(const lin_config_t* LIN_config)
 		break;
 		default:
 		break;
+	}
+}
+
+/*~~~~~~~~~~~~~~~~~ <HEADER> ~~~~~~~~~~~~~~~~~~~*/
+void LIN_SEND_MESSAGE_HEADER()
+{
+	lin_header_st hd_state = synch_break;
+
+	while(synch_break != hd_state.next[0])
+	{
+		FSM_master[hd_state].fptr();
 	}
 }
 
@@ -73,6 +84,16 @@ static void LIN_SYNC_BREAK()
 
 static void LIN_SYNC_FIELD()
 {
+	/*
+		"The  SYNCH  FIELD  contains  the  information for  the  clock
+		synchronization.  TheSYNCH FIELD is the data '0x55' inside 
+		a byte field, which is characterized by five fall-ing edges
+		(i.e. ërecessiveí to ëdominantí edges) within eight bit times
+		distance", p.21 
+
+		https://lniv.fe.uni-lj.si/courses/ndes/LIN_Spec_1_3.pdf
+	*/
+
 	uint8_t  synch_field_data;
 
 	synch_field_data = 0x55;
@@ -82,8 +103,27 @@ static void LIN_SYNC_FIELD()
 
 static void LIN_IDENT_FIELD()
 {
-	
+	/*
+		The IDENTIFIER FIELD (ID-Field) denotes the content of a message. 
+		The content is represented by six IDENTIFIER bits and two ID PARITY 
+		bits.
+
+		the  IDENTIFIER  bits  ID4  andID5  may  define  the  number  of  data 
+		fields in a message. This divides the set of 64 identifiers in four subsets 
+		of sixteen identifiers, with 2, 4, and 8data fields, respectively. In any case 
+		the length of a data field is defined in the configuration 
+		description file.
+
+		ID5 ID4	NDATA
+		0    0    2
+		0    1    2
+		1    0    4
+		1    1    8
+	*/
+
 }
+
+/*~~~~~~~~~~~~~~~~~ </HEADER> ~~~~~~~~~~~~~~~~~~~*/
 
 //***********//
 int main(void)

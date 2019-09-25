@@ -31,12 +31,12 @@ typedef enum
 	synch_break,
 	synch_field,
 	ident_field
-} lin_header_t;
+} lin_header_st;
 
 typedef struct
 {
 	void(*fptr)(void);
-	lin_header_t next[3];
+	lin_header_st next[3];
 } FSM_master_t;
 
 typedef struct
