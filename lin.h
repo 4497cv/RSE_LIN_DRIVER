@@ -12,6 +12,8 @@
 #ifndef LIN_H_
 #define LIN_H_
 
+#define HEADER_ST 3
+
 typedef enum
 {
 	DOMINANT = 0,
@@ -24,13 +26,25 @@ typedef enum
 	MASTER
 } lin_operation_mode_t
 
+typedef enum
+{
+	synch_break,
+	synch_field,
+	ident_field
+} lin_header_t;
+
+typedef struct
+{
+	void(*fptr)(void);
+	lin_header_t next[3];
+} FSM_master_t;
+
 typedef struct
 {
 	uart_channel_t uart_channel; //uart's channel
 	uint32_t system_clk;
 	lin_baud_rate_t baud_rate;
 	lin_operation_mode_t operation_mode; //indicate if slave or master
-
 } lin_config_t;
 
 typedef enum 
