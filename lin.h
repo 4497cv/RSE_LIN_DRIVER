@@ -12,6 +12,15 @@
 #ifndef LIN_H_
 #define LIN_H_
 
+#define ID0_MASK (0x80U)
+#define ID1_MASK (0x40U)
+#define ID2_MASK (0x20U)
+#define ID3_MASK (0x10U)
+#define ID4_MASK (0x08U)
+#define ID5_MASK (0x04U)
+#define P1_MASK  (0x02U)
+#define P2_MASK  (0x01U)
+
 #define HEADER_ST 3
 
 typedef enum
@@ -58,6 +67,5 @@ typedef struct
 {
 	
 };
-
 
 #endif

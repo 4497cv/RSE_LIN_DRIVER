@@ -8,12 +8,6 @@
 	\date	 24/09/2019
 */
 
-/* FreeRTOS kernel includes. */
-#include "FreeRTOS.h"
-#include "task.h"
-#include "queue.h"
-#include "timers.h"
-
 /* Freescale includes. */
 #include "fsl_device_registers.h"
 #include "fsl_debug_console.h"
@@ -101,6 +95,11 @@ static void LIN_SYNC_FIELD()
 	UART_put_char(g_uart_channel, synch_field_data);
 }
 
+/*
+	This field provides identification for each message on the network
+	and ultimately determines which nodes in the network receive or respond 
+	to each transmission.
+*/
 static void LIN_IDENT_FIELD()
 {
 	/*
@@ -110,7 +109,7 @@ static void LIN_IDENT_FIELD()
 
 		the  IDENTIFIER  bits  ID4  andID5  may  define  the  number  of  data 
 		fields in a message. This divides the set of 64 identifiers in four subsets 
-		of sixteen identifiers, with 2, 4, and 8data fields, respectively. In any case 
+		of sixteen identifiers, with 2, 4, and 8 data fields, respectively. In any case 
 		the length of a data field is defined in the configuration 
 		description file.
 
@@ -120,6 +119,11 @@ static void LIN_IDENT_FIELD()
 		1    0    4
 		1    1    8
 	*/
+
+	id_field_t ID = {0};
+
+	ID.parity_1 = (ID.id_0 && ID.id_1 && ID.id_2 && ID.id_4)
+	ID.parity_0 = !(ID.id_0 && ID.id_3 && ID.id_4 && ID.id_5)
 
 }
 
