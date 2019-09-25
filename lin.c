@@ -90,7 +90,7 @@ static void LIN_SYNC_FIELD()
 
 	uint8_t  synch_field_data;
 
-	synch_field_data = 0x55;
+	synch_field_data = SYNC_FIELD_MASK;
 
 	UART_put_char(g_uart_channel, synch_field_data);
 }
@@ -100,32 +100,69 @@ static void LIN_SYNC_FIELD()
 	and ultimately determines which nodes in the network receive or respond 
 	to each transmission.
 */
-static void LIN_IDENT_FIELD()
+static void LIN_IDENT_FIELD(uint8_t message_id, uint8_t message_parity)
 {
-	/*
-		The IDENTIFIER FIELD (ID-Field) denotes the content of a message. 
-		The content is represented by six IDENTIFIER bits and two ID PARITY 
-		bits.
+	uint8_t id_field;
+	boolean_t id_valid;
+	
+	id_valid = is_identifier_valid(message_id);
+	
+	if(TRUE == id_valid)
+	{
+		message_parity &= (MSG_PARITY_MASK)
+		message_id &= (MSG_ID_MASK)
+		
+		id_field |= message_parity
+		id_field |= message_id
 
-		the  IDENTIFIER  bits  ID4  andID5  may  define  the  number  of  data 
-		fields in a message. This divides the set of 64 identifiers in four subsets 
-		of sixteen identifiers, with 2, 4, and 8 data fields, respectively. In any case 
-		the length of a data field is defined in the configuration 
-		description file.
+		/*
+			The IDENTIFIER FIELD (ID-Field) denotes the content of a message. 
+			The content is represented by six IDENTIFIER bits and two ID PARITY 
+			bits.
 
-		ID5 ID4	NDATA
-		0    0    2
-		0    1    2
-		1    0    4
-		1    1    8
-	*/
+			the  IDENTIFIER  bits  ID4  andID5  may  define  the  number  of  data 
+			fields in a message. This divides the set of 64 identifiers in four subsets 
+			of sixteen identifiers, with 2, 4, and 8 data fields, respectively. In any case 
+			the length of a data field is defined in the configuration 
+			description file.
 
-	id_field_t ID = {0};
+										ID5  ID4 NDATA
+										 0    0    2
+										 0    1    2
+										 1    0    4
+										 1    1    8
+		*/
 
-	ID.parity_1 = (ID.id_0 && ID.id_1 && ID.id_2 && ID.id_4)
-	ID.parity_0 = !(ID.id_0 && ID.id_3 && ID.id_4 && ID.id_5)
-
+		UART_put_char(g_uart_channel, id_field);
+	}
+	else
+	{
+		/* ID NOT VALID*/
+	}
+	
 }
+
+boolean_t is_identifier_valid(uint8_t message_id)
+{
+	boolean_t ret_val;
+
+	if (message_id != RID0) && 
+	   (message_id != RID1) &&
+	   (message_id != RID2) &&
+	   (message_id != RID3) &&
+	   (message_id != RID4) &&
+	   (message_id != RID5))
+	{	
+		ret_val = TRUE;
+	}
+	else
+	{
+		ret_val = FALSE;
+	}
+	
+	return ret_val;
+}
+
 
 /*~~~~~~~~~~~~~~~~~ </HEADER> ~~~~~~~~~~~~~~~~~~~*/
 
