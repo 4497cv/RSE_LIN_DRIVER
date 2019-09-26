@@ -277,7 +277,7 @@ static void UART_Wait_Transmit_Complete(void)
 	do
 	{
 		/** Verify if transmitter state is idle (transmission activity complete **/
-		ver_transmission = ((UART0->S1) && (UART_S1_TC_MASK));
+		ver_transmission = ((UART3->S1) && (UART_S1_TC_MASK));
 	}
 	while(FALSE == ver_transmission);
 }

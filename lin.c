@@ -9,11 +9,7 @@
 */
 
 /* Freescale includes. */
-#include "board.h"
-
-#include "pin_mux.h"
-#include "clock_config.h"
-
+#include "MK64F12.h"
 #include "lin.h"
 #include "uart.h"
 #include "bits.h"
@@ -37,7 +33,7 @@ void LIN_init(const lin_config_t* LIN_config)
 	switch(LIN_config->operation_mode)
 	{
 		case MASTER:
-
+			LIN_SEND_MESSAGE_HEADER();
 		break;
 		case SLAVE:
 
@@ -52,10 +48,11 @@ void LIN_SEND_MESSAGE_HEADER()
 {
 	lin_header_st hd_state = synch_break;
 
-	while(synch_break != FSM_master[hd_state].next[0])
-	{
-		FSM_master[hd_state].fptr();
-	}
+//	while(synch_break != FSM_master[hd_state].next[0])
+//	{
+//		FSM_master[hd_state].fptr();
+//		hd_state = FSM_master[hd_state].next[0];
+//	}
 }
 
 void LIN_SYNC_BREAK()
@@ -169,28 +166,32 @@ boolean_t is_identifier_valid(uint8_t message_id)
 //***********//
 int main(void)
 {
-	/* System GPIO configuration */
-	gpio_pin_control_register_t uart_config = GPIO_MUX3;
-
 	const lin_config_t LIN_config =
 	{
-		UART_0,       //uart channel
+		UART_3,       //uart channel
 		SYSTEM_CLOCK, //system clock
 		BD_9600,       //uart's transference baud-rate
 		MASTER
 	};
 
+	/* System GPIO configuration */
+	gpio_pin_control_register_t uart_config = GPIO_MUX3;
+	GPIO_clock_gating(GPIO_B);
+	GPIO_clock_gating(GPIO_C);
+
 	/**Configures the pin control register of pin16 in PortB as UART RX*/
-	GPIO_pin_control_register(GPIO_B, BIT16, &uart_config);
+	GPIO_pin_control_register(GPIO_C, BIT16, &uart_config);
+	/**Configures the pin control registe of pin16 in PortB as UART TX*/
+	GPIO_pin_control_register(GPIO_C, BIT17, &uart_config);
+
+	//GPIO_data_direction_pin(GPIO_C, GPIO_OUTPUT, BIT17);
+	//GPIO_set_pin(GPIO_B, BIT19);
 
 	LIN_init(&LIN_config);
 
-    //xTaskCreate(task_100ms, "100ms Task", configMINIMAL_STACK_SIZE + 10, NULL, hello_task_PRIORITY, NULL);
-    //vTaskStartScheduler();
-
     for(;;)
 	{
-
+    	LIN_SEND_MESSAGE_HEADER();
 	}
 
 	return 0;
