@@ -33,7 +33,7 @@ void LIN_init(const lin_config_t* LIN_config)
 	switch(LIN_config->operation_mode)
 	{
 		case MASTER:
-			LIN_SEND_MESSAGE_HEADER();
+			
 		break;
 		case SLAVE:
 
@@ -48,11 +48,19 @@ void LIN_SEND_MESSAGE_HEADER()
 {
 	lin_header_st hd_state = synch_break;
 
-//	while(synch_break != FSM_master[hd_state].next[0])
+//	while(ident_field != FSM_master[hd_state].next[0])
 //	{
 //		FSM_master[hd_state].fptr();
 //		hd_state = FSM_master[hd_state].next[0];
 //	}
+
+	LIN_SYNC_BREAK();
+/* 
+	UART_put_char(g_uart_channel, low_phase_first);
+	UART_put_char(g_uart_channel, low_phase_second);
+
+	UART_put_char(g_uart_channel, synch_field_data); */
+
 }
 
 void LIN_SYNC_BREAK()
@@ -62,14 +70,16 @@ void LIN_SYNC_BREAK()
 		if it is longer than the maximum regular sequence of 
 		dominant bits in the protocol.
 	*/
+
 	uint8_t  low_phase_first;
 	uint8_t  low_phase_second;
 
 	low_phase_first = 0x00;
-	low_phase_second = 0x07;
+	low_phase_second = 0x00;
 
 	UART_put_char(g_uart_channel, low_phase_first);
 	UART_put_char(g_uart_channel, low_phase_second);
+	UART_put_char(g_uart_channel, SYNC_FIELD_MASK);
 }
 
 void LIN_SYNC_FIELD()
