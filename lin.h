@@ -65,14 +65,16 @@ typedef struct
 	uint32_t system_clk;
 	lin_baud_rate_t baud_rate;
 	lin_operation_mode_t operation_mode; //indicate if slave or master
+	uint8_t message_id;
+	uint8_t message_parity;
 } lin_config_t;
 
 
 boolean_t is_identifier_valid(uint8_t message_id);
-void LIN_IDENT_FIELD(uint8_t message_id, uint8_t message_parity);
-void LIN_SYNC_FIELD();
-void LIN_SYNC_BREAK();
+static void LIN_IDENT_FIELD();
+static void LIN_SYNC_FIELD();
+static void LIN_SYNC_BREAK();
 void LIN_SEND_MESSAGE_HEADER(); 
-void LIN_init(const lin_config_t* LIN_config);
+void LIN_init(lin_config_t* LIN_config);
 
 #endif
