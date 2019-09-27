@@ -2,10 +2,10 @@
 	\file lin.c
 	\brief	This is the source file for the LIN device driver for Kinetis K64.
 	
-	\authors César Villarreal, @4497cv
-			 Tsipini Franco, @t51p
-			 Moisés López, @DES7RIKER
-	\date	 24/09/2019
+	\authors: César Villarreal, @4497cv
+			  Tsipini Franco, @t51p
+			  Moisés López, @DES7RIKER
+	\date	  24/09/2019
 
 
 	\TODO: SLAVE MODE
@@ -17,12 +17,14 @@
 #include "uart.h"
 #include "bits.h"
 #include "gpio.h"
+#include "nvic.h"
 
 /* Definitions */
 #define SYSTEM_CLOCK   (21000000U)
-#define MESSAGE_ID     (0X10U)
+#define MESSAGE_ID     (0X12U)
 #define MESSAGE_PARITY (0X00U)
-#define LOW_PHASE_VAL  (0X00U)
+#define LOW_PHASE_VAL_1  (0X00U)
+#define LOW_PHASE_VAL_2  (0X00U)
 
 /* Global variables */
 static lin_config_t* g_lin_config; //configuration values
@@ -36,20 +38,49 @@ static FSM_master_t FSM_master[3] =
 
 void LIN_init(lin_config_t* LIN_config)
 {
-	UART_init(LIN_config->uart_channel, (uint32_t) LIN_config->system_clk, LIN_config->baud_rate);
-	g_lin_config = LIN_config;
+	/* System GPIO configuration */
+	gpio_pin_control_register_t uart_config = GPIO_MUX3;
 
 	switch(LIN_config->operation_mode)
 	{
 		case MASTER:
-
+			/* Configure UART for Tx and Rx Pins */
+			/* Configure GPIO PTC_16 for UART's Rx*/
+			GPIO_pin_control_register(GPIO_C, BIT16, &uart_config);
+			/* Configure GPIO PTC_16 for UART's Tx*/
+			GPIO_pin_control_register(GPIO_C, BIT17, &uart_config);
 		break;
 		case SLAVE:
+			/* Configure UART for Tx and Rx Pins */
+			/* Configure GPIO PTC_16 for UART's Rx*/
+			GPIO_pin_control_register(GPIO_C, BIT16, &uart_config);
+			/* Configure GPIO PTC_16 for UART's Tx*/
+			GPIO_pin_control_register(GPIO_C, BIT17, &uart_config);
+
+			/* Configure UART for serial port */
+			/**Configures the pin control register of pin16 in PortB as UART RX*/
+			GPIO_pin_control_register(GPIO_B, BIT16, &uart_config);
+			/**Configures the pin control register of pin16 in PortB as UART TX*/
+			GPIO_pin_control_register(GPIO_B, BIT17, &uart_config);
 
 		break;
 		default:
 		break;
 	}
+
+	/**Sets the threshold for interrupts, if the interrupt has higher priority constant that the BASEPRI, the interrupt will not be attended*/
+	NVIC_set_basepri_threshold(PRIORITY_10);
+	/**Enables the UART 0 interrupt in the NVIC*/
+	NVIC_enable_interrupt_and_priotity(UART3_IRQ, PRIORITY_2);
+	/**Enables interrupts*/
+	NVIC_global_enable_interrupts;
+
+	UART_init(LIN_config->uart_channel, (uint32_t) LIN_config->system_clk, LIN_config->baud_rate);
+
+	/**Enables the UART 0 interrupt*/
+	UART_interrupt_enable(UART_3);
+
+	g_lin_config = LIN_config;
 }
 
 /*~~~~~~~~~~~~~~~~~ <HEADER> ~~~~~~~~~~~~~~~~~~~*/
@@ -77,11 +108,14 @@ static void LIN_SYNC_BREAK()
 		dominant bits in the protocol.
 	*/
 
-	uint8_t sb_low_phase;
+	uint8_t sb_low_phase_first;
+	uint8_t sb_low_phase_second;
 
-	sb_low_phase = LOW_PHASE_VAL;
+	sb_low_phase_first = LOW_PHASE_VAL_1;
+	sb_low_phase_second = LOW_PHASE_VAL_2;
 
-	UART_put_char(g_lin_config->uart_channel, sb_low_phase);
+	UART_put_char(g_lin_config->uart_channel, sb_low_phase_first);
+	UART_put_char(g_lin_config->uart_channel, sb_low_phase_second);
 }
 
 static void LIN_SYNC_FIELD()
@@ -151,6 +185,31 @@ static void LIN_IDENT_FIELD()
 	
 }
 
+void LIN_WAIT_TO_RECEIVE()
+{
+	boolean_t mailbox_flag;
+	uint8_t mailbox_value;
+
+	/** Retrieve the state of the mailbox flag **/
+	mailbox_flag = UART_get_mailbox_flag(UART_3);
+
+	if(mailbox_flag)
+	{
+		//** MENU SELECTION **/
+		mailbox_value = UART_get_mailbox(UART_3); //get mailbox value
+
+		UART_put_char(UART_0, mailbox_value);
+		UART_empty_mailbox(UART_3); //clear mailbox flag and value
+	}
+
+
+}
+
+void LIN_CHECKSUM()
+{
+
+}
+
 boolean_t is_identifier_valid(uint8_t message_id)
 {
 	boolean_t ret_val;
@@ -186,22 +245,14 @@ int main(void)
 		UART_3,        //selected UART's channel
 		SYSTEM_CLOCK,  //system clock reference
 		BD_9600,       //uart's transference baud-rate
-		MASTER,		   //system's mode (slave or master)
+		SLAVE,		   //system's mode (slave or master)
 		MESSAGE_ID,	   //message identifier
 		MESSAGE_PARITY //the identifier bits sets the size of data field
 	};
 
-	/* System GPIO configuration */
-	gpio_pin_control_register_t uart_config = GPIO_MUX3;
-
 	/* Sytem's clock gating initizalization  */
 	GPIO_clock_gating(GPIO_B);
 	GPIO_clock_gating(GPIO_C);
-
-	/* Configure GPIO PTC_16 for UART's Rx*/
-	GPIO_pin_control_register(GPIO_C, BIT16, &uart_config);
-	/* Configure GPIO PTC_16 for UART's Tx*/
-	GPIO_pin_control_register(GPIO_C, BIT17, &uart_config);
 
 	/* Local Interconnect Network driver initialization */
 	LIN_init(&LIN_config);
@@ -209,7 +260,18 @@ int main(void)
 	/* SUPER-LOOP */
     for(;;)
 	{
-    	LIN_SEND_MESSAGE_HEADER(); //THIS IS TEMPORAL
+    	switch(LIN_config.operation_mode)
+    	{
+    		case MASTER:
+    			LIN_SEND_MESSAGE_HEADER(); //THIS IS TEMPORAL
+    		break;
+    		case SLAVE:
+
+    			LIN_WAIT_TO_RECEIVE();
+    		break;
+    		default:
+    		break;
+    	}
 	}
 
 	return 0;
