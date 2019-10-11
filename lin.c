@@ -6,98 +6,172 @@
 			  Tsipini Franco, @t51p
 			  Moisés López, @DES7RIKER
 	\date	  24/09/2019
-
-
-	\TODO: SLAVE MODE
 */
 
 /* Freescale includes. */
-#include "MK64F12.h"
-#include "lin.h"
-#include "uart.h"
-#include "bits.h"
-#include "gpio.h"
-#include "nvic.h"
 
-/* Definitions */
-#define SYSTEM_CLOCK   (21000000U)
-#define MESSAGE_ID     (0X12U)
-#define MESSAGE_PARITY (0X00U)
-#define LOW_PHASE_VAL_1  (0X00U)
-#define LOW_PHASE_VAL_2  (0X00U)
+#include "lin.h"
 
 /* Global variables */
 static lin_config_t* g_lin_config; //configuration values
+static uint8_t message_id_g;
+static uint8_t message_parity_g;
+static uint8_t data_g[N_DATA];
+static uint8_t message_header_g[3];
+static SemaphoreHandle_t header_sem;
+static SemaphoreHandle_t response_sem;
 
-static FSM_master_t FSM_master[3] =
+static fsm_header_t FSM_HEADER[HEADER_ST] =
 {
 	{LIN_SYNC_BREAK,  {synch_field, ident_field, synch_break}},
 	{LIN_SYNC_FIELD,  {ident_field, synch_break, synch_field}},
 	{LIN_IDENT_FIELD, {synch_break, synch_field, ident_field}}
 };
 
+static fsm_response_t FSM_RESPONSE[RESPONSE_ST] =
+{
+	{LIN_SEND_DATA, {check_sum, send_data}},
+	{LIN_CHECKSUM,  {send_data, check_sum}}
+};
+
 void LIN_init(lin_config_t* LIN_config)
 {
-	/* System GPIO configuration */
-	gpio_pin_control_register_t uart_config = GPIO_MUX3;
+	rtos_uart_config_t config;
 
 	switch(LIN_config->operation_mode)
 	{
 		case MASTER:
-			/* Configure UART for Tx and Rx Pins */
-			/* Configure GPIO PTC_16 for UART's Rx*/
-			GPIO_pin_control_register(GPIO_C, BIT16, &uart_config);
-			/* Configure GPIO PTC_16 for UART's Tx*/
-			GPIO_pin_control_register(GPIO_C, BIT17, &uart_config);
+			/* UART configuration for master */
+			config.baudrate = 9600;
+			config.rx_pin = 16;
+			config.tx_pin = 17;
+			config.pin_mux = kPORT_MuxAlt3;
+			config.uart_number = rtos_uart3;
+			config.port = rtos_uart_portC;
+			rtos_uart_init(config);
 		break;
 		case SLAVE:
-			/* Configure UART for Tx and Rx Pins */
-			/* Configure GPIO PTC_16 for UART's Rx*/
-			GPIO_pin_control_register(GPIO_C, BIT16, &uart_config);
-			/* Configure GPIO PTC_16 for UART's Tx*/
-			GPIO_pin_control_register(GPIO_C, BIT17, &uart_config);
-
-			/* Configure UART for serial port */
-			/**Configures the pin control register of pin16 in PortB as UART RX*/
-			GPIO_pin_control_register(GPIO_B, BIT16, &uart_config);
-			/**Configures the pin control register of pin16 in PortB as UART TX*/
-			GPIO_pin_control_register(GPIO_B, BIT17, &uart_config);
-
+			/* UART configuration for slave */
+			config.baudrate = 9600;
+			config.rx_pin = 16;
+			config.tx_pin = 17;
+			config.pin_mux = kPORT_MuxAlt3;
+			config.uart_number = rtos_uart3;
+			config.port = rtos_uart_portC;
+			rtos_uart_init(config);
 		break;
 		default:
 		break;
 	}
 
-	/**Sets the threshold for interrupts, if the interrupt has higher priority constant that the BASEPRI, the interrupt will not be attended*/
-	NVIC_set_basepri_threshold(PRIORITY_10);
-	/**Enables the UART 0 interrupt in the NVIC*/
-	NVIC_enable_interrupt_and_priotity(UART3_IRQ, PRIORITY_2);
-	/**Enables interrupts*/
-	NVIC_global_enable_interrupts;
+	/* UART configuration for serial port */
+	config.baudrate = 115200;
+	config.rx_pin = 16;
+	config.tx_pin = 17;
+	config.pin_mux = kPORT_MuxAlt3;
+	config.uart_number = rtos_uart0;
+	config.port = rtos_uart_portB;
+	rtos_uart_init(config);
 
-	UART_init(LIN_config->uart_channel, (uint32_t) LIN_config->system_clk, LIN_config->baud_rate);
+	message_id_g = LIN_config->message_id;
+	message_parity_g = LIN_config->message_parity;
 
-	/**Enables the UART 0 interrupt*/
-	UART_interrupt_enable(UART_3);
+	message_header_g[0] = LOW_PHASE_VAL_1;
+	message_header_g[1] = SYNC_FIELD_MASK;
+	message_header_g[2] = MESSAGE_ID;
+	data_g[0] = 0x10;
 
-	g_lin_config = LIN_config;
-}
+//	header_sem =  xSemaphoreCreateBinary();
+//	response_sem =  xSemaphoreCreateBinary();
+ }
 
 /*~~~~~~~~~~~~~~~~~ <HEADER> ~~~~~~~~~~~~~~~~~~~*/
-void LIN_SEND_MESSAGE_HEADER()
+void LIN_MESSAGE_HEADER_THREAD(void* args)
 {
 	lin_header_st hd_state; //header's state
+	uint8_t adc_val;
+	uint8_t checksum;
 
 	/* header's initial state */
 	hd_state = synch_break;
 
-	do
+	for(;;)
 	{
-		/* invoke header's state function */
-		FSM_master[hd_state].fptr();
-		/* switch to the next state */
-		hd_state = FSM_master[hd_state].next[0];
-	}while(synch_break != hd_state);
+		do
+		{
+			/* invoke header's state function */
+			FSM_HEADER[hd_state].fptr();
+			/* switch to the next state */
+			hd_state = FSM_HEADER[hd_state].next[0];
+		}while(synch_break != hd_state);
+	}
+}
+
+void LIN_MESSAGE_RESPONSE_THREAD(void* args)
+{
+	uint8_t data;
+	uint8_t buffer[3];
+	uint8_t i = 0;
+	lin_response_st response_st = send_data;
+
+	for(;;)
+	{
+		rtos_uart_receive(rtos_uart3, &data, 1);
+
+		if(i == 3)
+		{
+			if(TRUE == is_header_valid(buffer[0], buffer[1], buffer[2]))
+			{
+				do
+				{
+					FSM_RESPONSE[response_st].fptr();
+					response_st = FSM_RESPONSE[response_st].next[0];
+				} while(response_st != send_data);
+
+			}
+			else
+			{
+
+			}
+			i = 0;
+		}
+		else if(i < 3)
+		{
+			buffer[i] = data;
+			i++;
+		}
+		else
+		{
+
+		}
+
+	}
+}
+
+boolean_t is_header_valid(uint8_t buffer_0, uint8_t buffer_1, uint8_t buffer_2)
+{
+	uint8_t y;
+	uint8_t buffer[3];
+
+	buffer[0] = buffer_0;
+	buffer[1] = buffer_1;
+	buffer[2] = buffer_2;
+	boolean_t valid_buffer;
+
+	for(y = 0; y < 3; y++)
+	{
+		if(message_header_g[y] == buffer[y])
+		{
+			valid_buffer = TRUE;
+		}
+		else
+		{
+			valid_buffer = FALSE;
+		}
+	}
+
+	return valid_buffer;
+
 }
 
 static void LIN_SYNC_BREAK()
@@ -109,13 +183,13 @@ static void LIN_SYNC_BREAK()
 	*/
 
 	uint8_t sb_low_phase_first;
-	uint8_t sb_low_phase_second;
+	//uint8_t sb_low_phase_second;
 
 	sb_low_phase_first = LOW_PHASE_VAL_1;
-	sb_low_phase_second = LOW_PHASE_VAL_2;
+	//sb_low_phase_second = LOW_PHASE_VAL_2;
 
-	UART_put_char(g_lin_config->uart_channel, sb_low_phase_first);
-	UART_put_char(g_lin_config->uart_channel, sb_low_phase_second);
+	rtos_uart_send(rtos_uart3, &sb_low_phase_first,  DATA_LENGTH);
+	//rtos_uart_send(rtos_uart3, &sb_low_phase_second, DATA_LENGTH);
 }
 
 static void LIN_SYNC_FIELD()
@@ -134,7 +208,7 @@ static void LIN_SYNC_FIELD()
 
 	synch_field_data = SYNC_FIELD_MASK;
 
-	UART_put_char(g_lin_config->uart_channel, synch_field_data);
+	rtos_uart_send(rtos_uart3, &synch_field_data, DATA_LENGTH);
 }
 
 /*
@@ -146,17 +220,14 @@ static void LIN_IDENT_FIELD()
 {
 	boolean_t id_valid;
 	uint8_t id_field;
-	
+
 	id_field = 0;
 	id_valid = is_identifier_valid(g_lin_config->message_id);
 	
 	if(TRUE == id_valid)
 	{
-		g_lin_config->message_parity &= (MSG_PARITY_MASK);
-		g_lin_config->message_id &= (MSG_ID_MASK);
-		
-		id_field |= g_lin_config->message_parity;
-		id_field |= g_lin_config->message_id;
+		id_field |= message_parity_g;
+		id_field |= message_id_g;
 
 		/*
 			The IDENTIFIER FIELD (ID-Field) denotes the content of a message. 
@@ -176,38 +247,45 @@ static void LIN_IDENT_FIELD()
 										 1    1    8
 		*/
 
-		UART_put_char(g_lin_config->uart_channel, id_field);
+		rtos_uart_send(rtos_uart3, &id_field, DATA_LENGTH);
 	}
 	else
 	{
 		/* ID NOT VALID*/
 	}
-	
 }
 
-void LIN_WAIT_TO_RECEIVE()
+/*~~~~~~~~~~~~~~~~~ <RESPONSE> ~~~~~~~~~~~~~~~~~~~*/
+
+void LIN_SEND_DATA(void)
 {
-	boolean_t mailbox_flag;
-	uint8_t mailbox_value;
+	uint8_t i;
 
-	/** Retrieve the state of the mailbox flag **/
-	mailbox_flag = UART_get_mailbox_flag(UART_3);
-
-	if(mailbox_flag)
+	for(i = 0; i < N_DATA; i++)
 	{
-		//** MENU SELECTION **/
-		mailbox_value = UART_get_mailbox(UART_3); //get mailbox value
+		rtos_uart_send(rtos_uart3, &data_g[i], DATA_LENGTH);
+	}
+}
 
-		UART_put_char(UART_0, mailbox_value);
-		UART_empty_mailbox(UART_3); //clear mailbox flag and value
+void LIN_CHECKSUM(void)
+{
+	uint8_t chksum = 0;
+	uint8_t i = 0;
+
+	for(i = 0; i < N_DATA; i++)
+	{
+		chksum+=data_g[i];
+
+		if(chksum >= 256)
+		{
+			chksum -= 255;
+		}
 	}
 
+	chksum = 0xFF & ~(chksum);
 
-}
 
-void LIN_CHECKSUM()
-{
-
+	rtos_uart_send(rtos_uart3, &chksum, DATA_LENGTH);
 }
 
 boolean_t is_identifier_valid(uint8_t message_id)
@@ -237,42 +315,3 @@ boolean_t is_identifier_valid(uint8_t message_id)
 
 /*~~~~~~~~~~~~~~~~~ </HEADER> ~~~~~~~~~~~~~~~~~~~*/
 
-//***********//
-int main(void)
-{
-	lin_config_t LIN_config =
-	{
-		UART_3,        //selected UART's channel
-		SYSTEM_CLOCK,  //system clock reference
-		BD_9600,       //uart's transference baud-rate
-		SLAVE,		   //system's mode (slave or master)
-		MESSAGE_ID,	   //message identifier
-		MESSAGE_PARITY //the identifier bits sets the size of data field
-	};
-
-	/* Sytem's clock gating initizalization  */
-	GPIO_clock_gating(GPIO_B);
-	GPIO_clock_gating(GPIO_C);
-
-	/* Local Interconnect Network driver initialization */
-	LIN_init(&LIN_config);
-
-	/* SUPER-LOOP */
-    for(;;)
-	{
-    	switch(LIN_config.operation_mode)
-    	{
-    		case MASTER:
-    			LIN_SEND_MESSAGE_HEADER(); //THIS IS TEMPORAL
-    		break;
-    		case SLAVE:
-
-    			LIN_WAIT_TO_RECEIVE();
-    		break;
-    		default:
-    		break;
-    	}
-	}
-
-	return 0;
-}

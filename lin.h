@@ -7,15 +7,37 @@
 			 Moisés López,
 	\date	 24/09/2019
 */
-#include "uart.h"
+#include <stdio.h>
+#include "MK64F12.h"
+#include "board.h"
+#include "peripherals.h"
+#include "pin_mux.h"
+#include "clock_config.h"
+#include "rtos_uart.h"
+#include "bits.h"
+#include "pin_mux.h"
+#include "fsl_port.h"
+#include "FreeRTOS.h"
+#include "semphr.h"
+#include "ADC.h"
 
 #ifndef LIN_H_
 #define LIN_H_
 
-#define HEADER_ST 3
+/* Definitions */
+#define SYSTEM_CLOCK     (21000000U)
+#define MESSAGE_ID       (0X48U)
+#define MESSAGE_PARITY   (0X00U)
+#define LOW_PHASE_VAL_1  (0X00U)
+#define LOW_PHASE_VAL_2  (0XE0U)
+#define HEADER_ST   3
+#define RESPONSE_ST 2
 #define MSG_PARITY_MASK (0X03U)
-#define SYNC_FIELD_MASK (0x55U)
+#define SYNC_FIELD_MASK (0x55)
 #define MSG_ID_MASK     (0x3FU)
+#define N_DATA 1
+#define DATA_LENGTH 	  1
+
 
 typedef enum
 {
@@ -46,11 +68,23 @@ typedef enum
 	ident_field
 } lin_header_st;
 
+typedef enum
+{
+	send_data,
+	check_sum
+} lin_response_st;
+
 typedef struct
 {
 	void(*fptr)(void);
 	lin_header_st next[3];
-} FSM_master_t;
+} fsm_header_t;
+
+typedef struct
+{
+	void(*fptr)(void);
+	lin_response_st next[3];
+} fsm_response_t;
 
 typedef enum
 {
@@ -61,8 +95,6 @@ typedef enum
 
 typedef struct
 {
-	uart_channel_t uart_channel; //uart's channel
-	uint32_t system_clk;
 	lin_baud_rate_t baud_rate;
 	lin_operation_mode_t operation_mode; //indicate if slave or master
 	uint8_t message_id;
@@ -74,7 +106,13 @@ boolean_t is_identifier_valid(uint8_t message_id);
 static void LIN_IDENT_FIELD();
 static void LIN_SYNC_FIELD();
 static void LIN_SYNC_BREAK();
-void LIN_SEND_MESSAGE_HEADER(); 
 void LIN_init(lin_config_t* LIN_config);
+boolean_t is_header_valid(uint8_t buffer_0, uint8_t buffer_1, uint8_t buffer_2);
+
+void LIN_SEND_DATA(void);
+void LIN_CHECKSUM(void);
+
+void LIN_MESSAGE_HEADER_THREAD(void* args);
+void LIN_MESSAGE_RESPONSE_THREAD(void* args);
 
 #endif
